@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 const DEFAULT_FILE = ".monitor-kvm/credentials.json";
 const ENV_VAR = "MONITOR_KVM_CREDENTIALS";
 
-interface HostCredential {
+export interface HostCredential {
   clientKey: string;
   pairedAt: string;
 }
@@ -71,4 +71,10 @@ export async function removeClientKey(
   const data = await load(path);
   delete data.hosts[host];
   await save(path, data);
+}
+
+export async function getAllHosts(credentialsPath?: string): Promise<string[]> {
+  const path = getPath(credentialsPath);
+  const data = await load(path);
+  return Object.keys(data.hosts);
 }
