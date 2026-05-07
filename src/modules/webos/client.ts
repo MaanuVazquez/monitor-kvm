@@ -38,6 +38,10 @@ export function createClient(
   let cachedModelName: string | undefined;
 
   const client: WebOSClient = {
+    get connected() {
+      return conn.connected;
+    },
+
     async call(uri, payload) {
       return conn.send(uri, payload);
     },

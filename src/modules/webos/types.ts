@@ -28,6 +28,8 @@ export interface SystemInfo {
 }
 
 export interface WebOSClient {
+  connected: boolean;
+
   call(uri: string, payload?: Record<string, unknown>): Promise<unknown>;
 
   setInput(input: string): Promise<void>;
