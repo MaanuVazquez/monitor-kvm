@@ -12,6 +12,7 @@ interface PoolEntry {
 
 class DevicePool {
   private clients = new Map<string, PoolEntry>();
+  private connecting = new Map<string, Promise<WebOSClient>>();
   private credentialsPath: string | undefined;
 
   constructor(credentialsPath?: string) {
@@ -25,17 +26,24 @@ class DevicePool {
       return entry.client;
     }
 
+    const existing = this.connecting.get(host);
+    if (existing) return existing;
+
+    const promise = this.doConnect(host, entry).finally(() => {
+      this.connecting.delete(host);
+    });
+    this.connecting.set(host, promise);
+    return promise;
+  }
+
+  private async doConnect(host: string, entry: PoolEntry | undefined): Promise<WebOSClient> {
     if (entry && !entry.client.connected) {
-      try {
-        const fresh = await connect({
-          host,
-          credentialsPath: this.credentialsPath,
-        });
-        this.clients.set(host, { ...entry, client: fresh });
-        return fresh;
-      } catch {
-        throw new Error("Device not connected");
-      }
+      const fresh = await connect({
+        host,
+        credentialsPath: this.credentialsPath,
+      });
+      this.clients.set(host, { ...entry, client: fresh });
+      return fresh;
     }
 
     const fresh = await connect({
@@ -50,14 +58,11 @@ class DevicePool {
     return fresh;
   }
 
-  async pairDevice(host: string, opts: PairOptions): Promise<void> {
+  async pairDevice(host: string, opts: Omit<PairOptions, 'host'>): Promise<void> {
     await pair({
       host,
       credentialsPath: this.credentialsPath,
-      pairingType: opts.pairingType,
-      pin: opts.pin,
-      onPairingPrompt: opts.onPairingPrompt,
-      timeoutMs: opts.timeoutMs,
+      ...opts,
     });
 
     const client = await connect({
