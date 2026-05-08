@@ -7,6 +7,7 @@ import displayRoutes from "./display.ts";
 import audioRoutes from "./audio.ts";
 import appRoutes from "./app.ts";
 import callRoutes from "./call.ts";
+import servicesRoutes from "./services.ts";
 import rootRoutes from "./root.ts";
 
 const api = new Hono();
@@ -23,5 +24,6 @@ api.route("/devices", displayRoutes);
 api.route("/devices", audioRoutes);
 api.route("/devices", appRoutes);
 api.route("/devices", callRoutes);
+api.route("/devices", servicesRoutes);
 
 export default api;
