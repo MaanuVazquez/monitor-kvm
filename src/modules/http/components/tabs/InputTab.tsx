@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/api.ts";
 import { queryClient } from "../../lib/query-client.ts";
-import { useToast } from "../../hooks/useToast.ts";
+import { useToast } from "../../hooks/useToast.tsx";
 
 const INPUTS = [
   { id: "HDMI_1", label: "HDMI 1" },

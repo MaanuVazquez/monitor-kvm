@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useDevices, useReconnectDevice, useRemoveDevice } from "../hooks/useDevices.ts";
 import { useApiKey } from "../hooks/useApiKey.ts";
-import { useToast } from "../hooks/useToast.ts";
+import { useToast } from "../hooks/useToast.tsx";
 import { useState } from "react";
 import { PairModal } from "./PairModal.tsx";
 

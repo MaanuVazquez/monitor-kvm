@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { usePairDevice } from "../hooks/usePairDevice.ts";
-import { useToast } from "../hooks/useToast.ts";
+import { useToast } from "../hooks/useToast.tsx";
 
 interface PairModalProps {
   onClose: () => void;
