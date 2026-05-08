@@ -12,8 +12,7 @@ audio.get("/:host/volume", async (c) => {
     const volume = await client.getVolume();
     let muted = false;
     try {
-      const muteResult = (await client.call("ssap://audio/getMute")) as { mute?: boolean };
-      muted = muteResult?.mute ?? false;
+      muted = await client.getMute();
     } catch {
       // mute state is best-effort
     }

@@ -147,6 +147,11 @@ export function createClient(
       await conn.send("ssap://audio/setMute", { mute: false });
     },
 
+    async getMute() {
+      const result = (await conn.send("ssap://audio/getMute")) as { mute?: boolean };
+      return result.mute ?? false;
+    },
+
     async powerOff() {
       await conn.send("ssap://system/turnOff");
     },

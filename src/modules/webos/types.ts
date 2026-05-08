@@ -43,6 +43,7 @@ export interface WebOSClient {
 
   mute(): Promise<void>;
   unmute(): Promise<void>;
+  getMute(): Promise<boolean>;
 
   powerOff(): Promise<void>;
   turnOffScreen(): Promise<void>;
