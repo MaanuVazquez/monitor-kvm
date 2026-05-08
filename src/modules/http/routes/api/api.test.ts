@@ -84,7 +84,7 @@ describe("API routes", () => {
       const req = new Request("http://localhost/api", { headers: apiHeaders() });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.status).toBe("ok");
       expect(body.deviceCount).toBe(1);
       expect(body.connectedCount).toBe(1);
@@ -117,7 +117,7 @@ describe("API routes", () => {
       const req = new Request("http://localhost/api/devices", { headers: apiHeaders() });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body).toBeArray();
       expect(body[0].host).toBe("192.168.1.100");
       expect(body[0].connected).toBe(true);
@@ -132,7 +132,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.host).toBe("192.168.1.100");
       expect(body.connected).toBe(true);
       expect(body.modelName).toBe("TestMonitor");
@@ -147,7 +147,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.input).toBe("HDMI_1");
     });
   });
@@ -162,7 +162,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.input).toBe("HDMI_2");
     });
 
@@ -186,7 +186,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.brightness).toBe(50);
     });
   });
@@ -201,7 +201,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.brightness).toBe(75);
     });
 
@@ -236,7 +236,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.volume).toBe(15);
       expect(body.muted).toBe(false);
     });
@@ -252,7 +252,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.volume).toBe(30);
     });
 
@@ -277,7 +277,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.muted).toBe(true);
     });
   });
@@ -291,7 +291,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.muted).toBe(false);
     });
   });
@@ -342,7 +342,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.launched).toBe(true);
       expect(body.appId).toBe("com.webos.app.hdmi1");
     });
@@ -358,7 +358,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.result).toEqual({ ok: true });
     });
 
@@ -419,7 +419,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.services).toBeArray();
       expect(body.services[0]).toBe("ssap://system/getSystemInfo");
     });
@@ -433,7 +433,7 @@ describe("API routes", () => {
       });
       const res = await app.request(req);
       expect(res.status).toBe(404);
-      const body = await res.json();
+      const body = await res.json() as any;
       expect(body.error).toBe("Device not paired");
     });
   });
