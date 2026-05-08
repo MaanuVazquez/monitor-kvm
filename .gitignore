@@ -3,3 +3,6 @@ node_modules/
 
 # monitor-kvm credentials
 .monitor-kvm/
+
+public/client.js
+public/styles.css
