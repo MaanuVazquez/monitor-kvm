@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import ui from "./routes/ui.tsx";
-import api from "./routes/api.ts";
+import api from "./routes/api/index.ts";
 
 const app = new Hono();
 
