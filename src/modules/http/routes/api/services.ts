@@ -11,7 +11,7 @@ services.get("/:host/services", async (c) => {
     const svcList = await client.getServiceList();
     return c.json({ services: svcList });
   } catch (err: any) {
-    if (err.message === "Device not connected" || err.message?.includes("Not paired")) {
+    if (err.message?.includes("No credentials found") || err.message?.includes("Call pair()")) {
       return c.json({ error: "Device not paired" }, 404);
     }
     return c.json({ error: err.message ?? "Failed to get services" }, 500);

@@ -12,7 +12,7 @@ input.get("/:host/input", async (c) => {
     const inputValue = await client.getInput();
     return c.json({ input: inputValue });
   } catch (err: any) {
-    if (err.message === "Device not connected" || err.message?.includes("Not paired")) {
+    if (err.message?.includes("No credentials found") || err.message?.includes("Call pair()")) {
       return c.json({ error: "Device not paired" }, 404);
     }
     return c.json({ error: err.message ?? "Failed to get input" }, 500);
@@ -32,7 +32,7 @@ input.post("/:host/input", async (c) => {
     await client.setInput(body.input);
     return c.json({ input: body.input });
   } catch (err: any) {
-    if (err.message === "Device not connected" || err.message?.includes("Not paired")) {
+    if (err.message?.includes("No credentials found") || err.message?.includes("Call pair()")) {
       return c.json({ error: "Device not paired" }, 404);
     }
     return c.json({ error: err.message ?? "Failed to set input" }, 500);

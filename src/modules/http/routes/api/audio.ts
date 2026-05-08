@@ -19,7 +19,7 @@ audio.get("/:host/volume", async (c) => {
     }
     return c.json({ volume, muted });
   } catch (err: any) {
-    if (err.message === "Device not connected" || err.message?.includes("Not paired")) {
+    if (err.message?.includes("No credentials found") || err.message?.includes("Call pair()")) {
       return c.json({ error: "Device not paired" }, 404);
     }
     return c.json({ error: err.message ?? "Failed to get volume" }, 500);
@@ -39,7 +39,7 @@ audio.post("/:host/volume", async (c) => {
     await client.setVolume(body.value);
     return c.json({ volume: body.value });
   } catch (err: any) {
-    if (err.message === "Device not connected" || err.message?.includes("Not paired")) {
+    if (err.message?.includes("No credentials found") || err.message?.includes("Call pair()")) {
       return c.json({ error: "Device not paired" }, 404);
     }
     return c.json({ error: err.message ?? "Failed to set volume" }, 500);
@@ -54,7 +54,7 @@ audio.post("/:host/volume/mute", async (c) => {
     await client.mute();
     return c.json({ muted: true });
   } catch (err: any) {
-    if (err.message === "Device not connected" || err.message?.includes("Not paired")) {
+    if (err.message?.includes("No credentials found") || err.message?.includes("Call pair()")) {
       return c.json({ error: "Device not paired" }, 404);
     }
     return c.json({ error: err.message ?? "Failed to mute" }, 500);
@@ -69,7 +69,7 @@ audio.delete("/:host/volume/mute", async (c) => {
     await client.unmute();
     return c.json({ muted: false });
   } catch (err: any) {
-    if (err.message === "Device not connected" || err.message?.includes("Not paired")) {
+    if (err.message?.includes("No credentials found") || err.message?.includes("Call pair()")) {
       return c.json({ error: "Device not paired" }, 404);
     }
     return c.json({ error: err.message ?? "Failed to unmute" }, 500);

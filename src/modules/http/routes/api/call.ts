@@ -17,7 +17,7 @@ call.post("/:host/call", async (c) => {
     const result = await client.call(body.uri, body.payload);
     return c.json({ result });
   } catch (err: any) {
-    if (err.message === "Device not connected" || err.message?.includes("Not paired")) {
+    if (err.message?.includes("No credentials found") || err.message?.includes("Call pair()")) {
       return c.json({ error: "Device not paired" }, 404);
     }
     return c.json({ error: err.message ?? "SSAP call failed" }, 500);
