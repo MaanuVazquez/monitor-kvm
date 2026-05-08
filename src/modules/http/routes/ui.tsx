@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { reactRenderer } from "@hono/react-renderer";
 import App from "../components/App.tsx";
+import { devicePool } from "../device-pool.ts";
 
 const ui = new Hono();
 
@@ -13,8 +14,9 @@ ui.get(
   ))
 );
 
-ui.get("/", (c) => {
-  return c.render(<App />);
+ui.get("/", async (c) => {
+  const devices = await devicePool.getAllDevices();
+  return c.render(<App devices={devices} />);
 });
 
 export default ui;
