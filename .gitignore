@@ -1,8 +1,12 @@
-.monitor-kvm/
 node_modules/
 
 # monitor-kvm credentials
 .monitor-kvm/
+
+# local environment
+.env
+.env.*
+!.env.example
 
 public/client.js
 public/styles.css

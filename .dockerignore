@@ -1,0 +1,17 @@
+.git
+.gitignore
+.dockerignore
+Dockerfile
+node_modules
+.monitor-kvm
+.env
+.env.*
+!.env.example
+public/client.js.map
+public/styles.css.map
+docs
+*.log
+*.tmp
+coverage
+.worktrees
+worktrees
