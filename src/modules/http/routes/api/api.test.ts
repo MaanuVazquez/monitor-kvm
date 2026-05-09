@@ -1,6 +1,14 @@
 import { describe, it, expect, mock, beforeEach, beforeAll } from "bun:test";
 import { Hono } from "hono";
 
+let startPinPairingImpl: (host: string) => void | Promise<void>;
+let submitPinPairingImpl: (host: string, pin: string) => void | Promise<void>;
+
+const startPinPairingMock = mock((host: string) => startPinPairingImpl(host));
+const submitPinPairingMock = mock((host: string, pin: string) => submitPinPairingImpl(host, pin));
+const cancelPinPairingMock = mock((_host: string) => {});
+const sendRemoteButtonMock = mock((_button: string) => {});
+
 mock.module("../../device-pool.ts", () => ({
   devicePool: {
     getAllDevices: mock(() => [
@@ -29,6 +37,7 @@ mock.module("../../device-pool.ts", () => ({
           })),
           getServiceList: mock(() => ["ssap://system/getSystemInfo", "ssap://audio/getVolume"]),
           launchApp: mock((_appId: string, _params?: Record<string, unknown>) => {}),
+          sendRemoteButton: sendRemoteButtonMock,
           call: mock((_uri: string, _payload?: Record<string, unknown>) => ({ ok: true })),
           disconnect: mock(() => {}),
         };
@@ -39,6 +48,9 @@ mock.module("../../device-pool.ts", () => ({
       throw new Error("Unknown host");
     }),
     pairDevice: mock((_host: string, _opts: any) => {}),
+    startPinPairing: startPinPairingMock,
+    submitPinPairing: submitPinPairingMock,
+    cancelPinPairing: cancelPinPairingMock,
     removeDevice: mock((_host: string) => {}),
     forceReconnect: mock((_host: string) => {}),
     getDeviceStatus: mock((host: string) => ({
@@ -76,6 +88,12 @@ function apiHeaders(extra?: Record<string, string>) {
 describe("API routes", () => {
   beforeEach(() => {
     process.env.API_KEY = apiKey();
+    startPinPairingImpl = (_host: string) => {};
+    submitPinPairingImpl = (_host: string, _pin: string) => {};
+    startPinPairingMock.mockClear();
+    submitPinPairingMock.mockClear();
+    cancelPinPairingMock.mockClear();
+    sendRemoteButtonMock.mockClear();
   });
 
   describe("GET /api", () => {
@@ -228,6 +246,34 @@ describe("API routes", () => {
     });
   });
 
+  describe("POST /api/devices/:host/remote/button", () => {
+    it("sends a remote button", async () => {
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/remote/button", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ button: "MENU" }),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(200);
+      const body = await res.json() as any;
+      expect(body).toEqual({ button: "MENU" });
+      expect(sendRemoteButtonMock).toHaveBeenCalledWith("MENU");
+    });
+
+    it("rejects invalid remote buttons", async () => {
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/remote/button", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ button: "POWER" }),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(400);
+      expect(sendRemoteButtonMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe("GET /api/devices/:host/volume", () => {
     it("returns volume and mute state", async () => {
       const app = createApp();
@@ -375,6 +421,164 @@ describe("API routes", () => {
   });
 
   describe("POST /api/devices/:host/pair", () => {
+    it("starts PIN pairing", async () => {
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/pair/pin/start", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(200);
+      const body = await res.json() as any;
+      expect(body).toEqual({ pending: true, host: "192.168.1.100" });
+      expect(startPinPairingMock).toHaveBeenCalledWith("192.168.1.100");
+    });
+
+    it("submits PIN pairing", async () => {
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/pair/pin/submit", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ pin: " 123456 " }),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(200);
+      const body = await res.json() as any;
+      expect(body).toEqual({ paired: true, host: "192.168.1.100" });
+      expect(submitPinPairingMock).toHaveBeenCalledWith("192.168.1.100", "123456");
+    });
+
+    it("cancels PIN pairing", async () => {
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/pair/pin", {
+        method: "DELETE",
+        headers: apiHeaders(),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(200);
+      const body = await res.json() as any;
+      expect(body).toEqual({ cancelled: true, host: "192.168.1.100" });
+      expect(cancelPinPairingMock).toHaveBeenCalledWith("192.168.1.100");
+    });
+
+    it("rejects missing PIN on submit", async () => {
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/pair/pin/submit", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({}),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(400);
+      const body = await res.json() as any;
+      expect(body).toEqual({ error: "pin is required" });
+      expect(submitPinPairingMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects null body as missing PIN on submit", async () => {
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/pair/pin/submit", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(null),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(400);
+      const body = await res.json() as any;
+      expect(body).toEqual({ error: "pin is required" });
+      expect(submitPinPairingMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects blank PIN on submit", async () => {
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/pair/pin/submit", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ pin: "   " }),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(400);
+      const body = await res.json() as any;
+      expect(body).toEqual({ error: "pin is required" });
+      expect(submitPinPairingMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects non-string PIN on submit", async () => {
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/pair/pin/submit", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ pin: 123456 }),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(400);
+      const body = await res.json() as any;
+      expect(body).toEqual({ error: "pin is required" });
+      expect(submitPinPairingMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects malformed PIN on submit", async () => {
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/pair/pin/submit", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ pin: "12a456" }),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(400);
+      const body = await res.json() as any;
+      expect(body).toEqual({ error: "pin must contain only digits" });
+      expect(submitPinPairingMock).not.toHaveBeenCalled();
+    });
+
+    it("returns conflict when no PIN pairing session is pending", async () => {
+      submitPinPairingImpl = () => {
+        throw new Error("No pending PIN pairing session. Start PIN pairing again.");
+      };
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/pair/pin/submit", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ pin: "123456" }),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(409);
+      const body = await res.json() as any;
+      expect(body).toEqual({ error: "No pending PIN pairing session. Start PIN pairing again." });
+    });
+
+    it("returns conflict when PIN pairing submission is already in progress", async () => {
+      submitPinPairingImpl = () => {
+        throw new Error("PIN pairing submission already in progress.");
+      };
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/pair/pin/submit", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ pin: "123456" }),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(409);
+      const body = await res.json() as any;
+      expect(body).toEqual({ error: "PIN pairing submission already in progress." });
+    });
+
+    it("returns server error for unexpected PIN pairing submit failures", async () => {
+      submitPinPairingImpl = () => {
+        throw new Error("Unexpected failure");
+      };
+      const app = createApp();
+      const req = new Request("http://localhost/api/devices/192.168.1.100/pair/pin/submit", {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ pin: "123456" }),
+      });
+      const res = await app.request(req);
+      expect(res.status).toBe(500);
+      const body = await res.json() as any;
+      expect(body).toEqual({ error: "Unexpected failure" });
+    });
+
     it("pairs a device", async () => {
       const app = createApp();
       const req = new Request("http://localhost/api/devices/192.168.1.100/pair", {

@@ -18,11 +18,16 @@ import {
 import { validateInput, isKnownInput } from "./validation.ts";
 
 let tmpDir: string;
+const pointerSocketMessages: string[] = [];
+let pointerSocketPath = "wss://192.168.1.100:3001/resources/mock/netinput.pointer.sock";
 
 beforeEach(async () => {
   tmpDir = join(tmpdir(), `monitor-kvm-test-${Date.now()}`);
   await mkdir(tmpDir, { recursive: true });
   delete process.env.MONITOR_KVM_CREDENTIALS;
+  delete process.env.MONITOR_KVM_POINTER_TIMEOUT_MS;
+  pointerSocketMessages.length = 0;
+  pointerSocketPath = "wss://192.168.1.100:3001/resources/mock/netinput.pointer.sock";
 });
 
 afterEach(async () => {
@@ -182,6 +187,7 @@ class MockWebSocket extends EventEmitter {
   static OPEN = 1;
   static CLOSING = 2;
   static CLOSED = 3;
+  static instances: MockWebSocket[] = [];
 
   readyState = MockWebSocket.CONNECTING;
   url: string;
@@ -191,6 +197,8 @@ class MockWebSocket extends EventEmitter {
     super();
     this.url = url;
     this.opts = opts;
+    MockWebSocket.instances.push(this);
+    if (url.includes("timeout.pointer.sock")) return;
     queueMicrotask(() => {
       if (this.readyState !== MockWebSocket.CLOSED) {
         this.readyState = MockWebSocket.OPEN;
@@ -199,7 +207,13 @@ class MockWebSocket extends EventEmitter {
     });
   }
 
-  send(data: string | Buffer) {
+  send(data: string | Buffer, cb?: (err?: Error) => void) {
+    if (this.url.includes("netinput.pointer.sock")) {
+      pointerSocketMessages.push(String(data));
+      cb?.();
+      return;
+    }
+
     const msg = JSON.parse(String(data));
 
     if (msg.type === "register") {
@@ -208,6 +222,19 @@ class MockWebSocket extends EventEmitter {
           this.emit(
             "message",
             Buffer.from(JSON.stringify({ id: "0", type: "registered" }))
+          );
+        });
+      } else if (msg.payload?.pairingType === "PIN") {
+        queueMicrotask(() => {
+          this.emit(
+            "message",
+            Buffer.from(
+              JSON.stringify({
+                id: "0",
+                type: "response",
+                payload: { pairingType: "PIN" },
+              })
+            )
           );
         });
       } else {
@@ -226,6 +253,28 @@ class MockWebSocket extends EventEmitter {
       }
     } else if (msg.type === "request") {
       let payload: Record<string, unknown> = { returnValue: true };
+
+      if (msg.uri === "ssap://pairing/setPin") {
+        queueMicrotask(() => {
+          this.emit(
+            "message",
+            Buffer.from(
+              JSON.stringify({
+                id: msg.id,
+                type: "registered",
+                payload: { clientKey: `pin-key-${msg.payload?.pin}` },
+              })
+            )
+          );
+          if (msg.payload?.pin === "close-after-key") {
+            queueMicrotask(() => this.emit("close"));
+          }
+          if (msg.payload?.pin === "error-after-key") {
+            queueMicrotask(() => this.emit("error", new Error("late error")));
+          }
+        });
+        return;
+      }
 
       if (msg.uri === "ssap://system/getSystemInfo") {
         payload = {
@@ -246,6 +295,11 @@ class MockWebSocket extends EventEmitter {
         payload = { returnValue: true, settings: { brightness: 75 } };
       } else if (msg.uri === "ssap://config/getConfigs") {
         payload = { returnValue: true, configs: { "com.palm.brightness": 75 } };
+      } else if (msg.uri === "ssap://com.webos.service.networkinput/getPointerInputSocket") {
+        payload = {
+          returnValue: true,
+          socketPath: pointerSocketPath,
+        };
       }
 
       queueMicrotask(() => {
@@ -274,7 +328,7 @@ mock.module("ws", () => {
 });
 
 const { ConnectionManager } = await import("./connection.ts");
-const { pair, connect, forgetCredentials } = await import("./index.ts");
+const { pair, beginPinPairing, connect, forgetCredentials } = await import("./index.ts");
 
 describe("ConnectionManager", () => {
   test("connects and registers with clientKey", async () => {
@@ -327,6 +381,72 @@ describe("public API", () => {
     await expect(
       pair({ host: "192.168.1.100", credentialsPath: path })
     ).rejects.toThrow("Already paired");
+  });
+
+  test("beginPinPairing waits for submitPin before storing clientKey", async () => {
+    const path = join(tmpDir, "creds.json");
+    const session = await beginPinPairing({
+      host: "192.168.1.100",
+      credentialsPath: path,
+    });
+
+    expect(await getClientKey("192.168.1.100", path)).toBeUndefined();
+    await session.submitPin("123456");
+    expect(await getClientKey("192.168.1.100", path)).toBe("pin-key-123456");
+  });
+
+  test("pair with PIN submits supplied code and stores clientKey", async () => {
+    const path = join(tmpDir, "creds.json");
+    await pair({
+      host: "192.168.1.100",
+      credentialsPath: path,
+      pairingType: "PIN",
+      pin: "654321",
+    });
+
+    expect(await getClientKey("192.168.1.100", path)).toBe("pin-key-654321");
+  });
+
+  test("pair with PIN cancels session when pin callback rejects", async () => {
+    MockWebSocket.instances = [];
+    const path = join(tmpDir, "creds.json");
+
+    await expect(
+      pair({
+        host: "192.168.1.100",
+        credentialsPath: path,
+        pairingType: "PIN",
+        pin: () => Promise.reject(new Error("pin unavailable")),
+      })
+    ).rejects.toThrow("pin unavailable");
+
+    expect(MockWebSocket.instances[0]?.readyState).toBe(MockWebSocket.CLOSED);
+  });
+
+  test("submitPin ignores close after receiving clientKey", async () => {
+    const path = join(tmpDir, "creds.json");
+    const session = await beginPinPairing({
+      host: "192.168.1.100",
+      credentialsPath: path,
+    });
+
+    await expect(session.submitPin("close-after-key")).resolves.toBeUndefined();
+    expect(await getClientKey("192.168.1.100", path)).toBe(
+      "pin-key-close-after-key"
+    );
+  });
+
+  test("submitPin ignores error after receiving clientKey", async () => {
+    const path = join(tmpDir, "creds.json");
+    const session = await beginPinPairing({
+      host: "192.168.1.100",
+      credentialsPath: path,
+    });
+
+    await expect(session.submitPin("error-after-key")).resolves.toBeUndefined();
+    expect(await getClientKey("192.168.1.100", path)).toBe(
+      "pin-key-error-after-key"
+    );
   });
 
   test("connect returns client handle", async () => {
@@ -389,6 +509,40 @@ describe("WebOSClient methods", () => {
     const tv = await connect({ host: "192.168.1.100", credentialsPath: path });
     const brightness = await tv.getBrightness();
     expect(brightness).toBe(75);
+    await tv.disconnect();
+  });
+
+  test("sendRemoteButton sends a button command over pointer socket", async () => {
+    const path = join(tmpDir, "creds.json");
+    await setClientKey("192.168.1.100", "test-key", path);
+    const tv = await connect({ host: "192.168.1.100", credentialsPath: path });
+
+    await tv.sendRemoteButton("MENU" as any);
+
+    expect(pointerSocketMessages).toContain("type:button\nname:MENU\n\n");
+    await tv.disconnect();
+  });
+
+  test("sendRemoteButton rejects pointer socket URLs for other hosts", async () => {
+    const path = join(tmpDir, "creds.json");
+    pointerSocketPath = "wss://192.168.1.200:3001/resources/mock/netinput.pointer.sock";
+    await setClientKey("192.168.1.100", "test-key", path);
+    const tv = await connect({ host: "192.168.1.100", credentialsPath: path });
+
+    await expect(tv.sendRemoteButton("MENU")).rejects.toThrow("Invalid pointer input socket URL");
+
+    await tv.disconnect();
+  });
+
+  test("sendRemoteButton times out when pointer socket never opens", async () => {
+    const path = join(tmpDir, "creds.json");
+    pointerSocketPath = "wss://192.168.1.100:3001/resources/mock/timeout.pointer.sock";
+    process.env.MONITOR_KVM_POINTER_TIMEOUT_MS = "1";
+    await setClientKey("192.168.1.100", "test-key", path);
+    const tv = await connect({ host: "192.168.1.100", credentialsPath: path });
+
+    await expect(tv.sendRemoteButton("MENU")).rejects.toThrow("Pointer input socket timed out");
+
     await tv.disconnect();
   });
 

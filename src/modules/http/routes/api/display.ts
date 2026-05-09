@@ -4,6 +4,17 @@ import type { SetValueBody } from "../../types.ts";
 
 const display = new Hono();
 
+const REMOTE_BUTTONS = new Set([
+  "UP",
+  "DOWN",
+  "LEFT",
+  "RIGHT",
+  "ENTER",
+  "BACK",
+  "MENU",
+  "EXIT",
+]);
+
 display.get("/:host/brightness", async (c) => {
   const host = c.req.param("host");
 
@@ -36,6 +47,27 @@ display.post("/:host/brightness", async (c) => {
       return c.json({ error: "Device not paired" }, 404);
     }
     return c.json({ error: err.message ?? "Failed to set brightness" }, 500);
+  }
+});
+
+display.post("/:host/remote/button", async (c) => {
+  const host = c.req.param("host");
+  const body = (await c.req.json().catch(() => ({}))) as { button?: unknown } | null;
+  const button = body && typeof body === "object" ? body.button : undefined;
+
+  if (typeof button !== "string" || !REMOTE_BUTTONS.has(button)) {
+    return c.json({ error: "button must be a supported remote button" }, 400);
+  }
+
+  try {
+    const client = await devicePool.getClient(host);
+    await client.sendRemoteButton(button as any);
+    return c.json({ button });
+  } catch (err: any) {
+    if (err.message?.includes("No credentials found") || err.message?.includes("Call pair()")) {
+      return c.json({ error: "Device not paired" }, 404);
+    }
+    return c.json({ error: err.message ?? "Failed to send remote button" }, 500);
   }
 });
 

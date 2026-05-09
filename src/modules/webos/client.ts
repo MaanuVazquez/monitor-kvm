@@ -1,6 +1,7 @@
+import WebSocket from "ws";
 import { ConnectionManager } from "./connection.ts";
 import { validateInput } from "./validation.ts";
-import type { SystemInfo, WebOSClient } from "./types.ts";
+import type { RemoteButton, SystemInfo, WebOSClient } from "./types.ts";
 
 const APP_ID_TO_INPUT: Record<string, string> = {
   "com.webos.app.hdmi1": "HDMI_1",
@@ -29,6 +30,17 @@ const INPUT_TO_APP_ID: Record<string, string> = {
   COMPONENT: "com.webos.app.externalinput.component",
   SCREEN_SHARE: "com.webos.app.screenshare",
 };
+
+const REMOTE_BUTTONS = new Set<RemoteButton>([
+  "UP",
+  "DOWN",
+  "LEFT",
+  "RIGHT",
+  "ENTER",
+  "BACK",
+  "MENU",
+  "EXIT",
+]);
 
 export function createClient(
   host: string,
@@ -204,6 +216,87 @@ export function createClient(
       await conn.send("ssap://system.launcher/launch", {
         id: appId,
         ...(params ?? {}),
+      });
+    },
+
+    async sendRemoteButton(button) {
+      if (!REMOTE_BUTTONS.has(button)) {
+        throw new Error(`Unsupported remote button: ${button}`);
+      }
+
+      const result = (await conn.send(
+        "ssap://com.webos.service.networkinput/getPointerInputSocket"
+      )) as { socketPath?: string };
+
+      if (!result.socketPath) {
+        throw new Error("Pointer input socket not available");
+      }
+
+      const socketUrl = new URL(result.socketPath);
+      if (
+        socketUrl.protocol !== "wss:" ||
+        socketUrl.hostname !== host ||
+        socketUrl.port !== "3001"
+      ) {
+        throw new Error("Invalid pointer input socket URL");
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const timeoutMs = Number(process.env.MONITOR_KVM_POINTER_TIMEOUT_MS ?? 5000);
+        const ws = new WebSocket(result.socketPath!, {
+          tls: { rejectUnauthorized: false },
+          minVersion: "TLSv1" as any,
+          maxVersion: "TLSv1.3" as any,
+        } as any);
+
+        let settled = false;
+        const settle = (fn: () => void) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          fn();
+        };
+
+        const cleanup = () => {
+          clearTimeout(timer);
+          ws.removeListener("open", onOpen);
+          ws.removeListener("error", onError);
+          ws.removeListener("close", onClose);
+          ws.on("error", () => {});
+          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+            try {
+              ws.close();
+            } catch {
+              // ignore
+            }
+          }
+        };
+
+        const onOpen = () => {
+          ws.send(`type:button\nname:${button}\n\n`, (err) => {
+            if (err) {
+              settle(() => reject(err));
+              return;
+            }
+            settle(resolve);
+          });
+        };
+
+        const onError = (err: Error) => {
+          settle(() => reject(new Error(`Pointer input socket error: ${err.message}`)));
+        };
+
+        const onClose = () => {
+          settle(() => reject(new Error("Pointer input socket closed before button was sent")));
+        };
+
+        const timer = setTimeout(() => {
+          settle(() => reject(new Error("Pointer input socket timed out")));
+        }, timeoutMs);
+
+        ws.once("open", onOpen);
+        ws.once("error", onError);
+        ws.once("close", onClose);
       });
     },
 

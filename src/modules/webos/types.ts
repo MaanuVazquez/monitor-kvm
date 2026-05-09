@@ -7,6 +7,12 @@ export interface PairOptions {
   pin?: string | (() => string | Promise<string>);
 }
 
+export interface PinPairingSession {
+  host: string;
+  submitPin(pin: string): Promise<void>;
+  cancel(): void;
+}
+
 export interface ConnectOptions {
   host: string;
   credentialsPath?: string;
@@ -26,6 +32,16 @@ export interface SystemInfo {
   uhd?: boolean;
   features?: Record<string, unknown>;
 }
+
+export type RemoteButton =
+  | "UP"
+  | "DOWN"
+  | "LEFT"
+  | "RIGHT"
+  | "ENTER"
+  | "BACK"
+  | "MENU"
+  | "EXIT";
 
 export interface WebOSClient {
   connected: boolean;
@@ -53,6 +69,8 @@ export interface WebOSClient {
   getServiceList(): Promise<string[]>;
 
   launchApp(appId: string, params?: Record<string, unknown>): Promise<void>;
+
+  sendRemoteButton(button: RemoteButton): Promise<void>;
 
   disconnect(): Promise<void>;
 }
